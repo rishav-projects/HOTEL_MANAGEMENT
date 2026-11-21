@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotel Chain Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--navy:#0b1f3a;--navy2:#13305a;--ink:#1f2937;--mute:#64748b;--line:#e5e9f0;--bg:#f3f5f9;--card:#fff;--gold:#c9a24b;--gold2:#e2c276;--ok:#15803d;--okbg:#dcfce7;--warn:#a16207;--warnbg:#fef3c7;--bad:#b91c1c;--badbg:#fee2e2;--r:14px}
+*{box-sizing:border-box;font-family:'Inter','Segoe UI',system-ui,sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:14px}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+button{cursor:pointer;font-family:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.hide{display:none!important}
+
+/* login */
+#login-box{min-height:100vh;display:grid;grid-template-columns:1.15fr 1fr}
+.l-art{position:relative;background:linear-gradient(160deg,#0b1f3a,#13305a) center/cover;color:#fff;display:flex;align-items:flex-end;padding:56px}
+.l-art::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,31,58,.25),rgba(11,31,58,.88))}
+.l-art div{position:relative;max-width:440px}
+.l-art h2{font-size:34px;line-height:1.2;margin:0 0 12px;font-weight:600;letter-spacing:-.5px}
+.l-art p{margin:0;color:#cbd5e1;line-height:1.6}
+.l-art hr{width:56px;border:0;border-top:2px solid var(--gold);margin:0 0 20px}
+.l-form{display:flex;align-items:center;justify-content:center;padding:32px;background:#fff}
+.l-card{width:100%;max-width:380px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:34px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--gold2),var(--gold));display:grid;place-items:center;color:var(--navy)}
+.logo svg{width:22px;height:22px}
+.brand b{display:block;font-size:17px;color:var(--navy)}
+.brand span{font-size:12px;color:var(--mute)}
+.l-card h1{margin:0 0 6px;font-size:26px;color:var(--navy);letter-spacing:-.4px}
+.l-card>p{margin:0 0 24px;color:var(--mute)}
+label.f{display:block;font-weight:500;margin:0 0 6px;font-size:13px}
+.inp,input,select{width:100%;padding:11px 13px;border:1px solid #d5dbe5;border-radius:10px;background:#fff;color:var(--ink);font-size:14px;transition:border-color .2s,box-shadow .2s}
+input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,75,.18);outline:0}
+.fld{margin-bottom:16px}
+.pw{position:relative}.pw input{padding-right:44px}
+.pw button{position:absolute;right:4px;top:4px;bottom:4px;width:38px;border:0;background:none;color:var(--mute);border-radius:8px}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;font-size:13px}
+.row label{display:flex;align-items:center;gap:8px;color:var(--mute)}
+.row input{width:auto}
+.row a{color:var(--navy2);font-weight:500;text-decoration:none;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;padding:11px 20px;font-weight:600;font-size:14px;transition:transform .15s,box-shadow .2s,background .2s}
+.btn.gold{background:linear-gradient(135deg,var(--gold2),var(--gold));color:var(--navy);box-shadow:0 6px 16px rgba(201,162,75,.35)}
+.btn.gold:hover{transform:translateY(-1px)}
+.btn.navy{background:var(--navy);color:#fff}.btn.navy:hover{background:var(--navy2)}
+.btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.btn.full{width:100%}.btn:disabled{opacity:.7;cursor:wait}
+.spin{width:16px;height:16px;border:2px solid rgba(11,31,58,.3);border-top-color:var(--navy);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.err{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:13px}
+.err:empty{display:none}
+
+/* app shell */
+#app{display:none}
+aside{position:fixed;inset:0 auto 0 0;width:250px;background:linear-gradient(180deg,var(--navy),#08162b);color:#cbd5e1;padding:22px 14px;display:flex;flex-direction:column;z-index:30;transition:transform .25s}
+aside .brand{padding:0 8px;margin-bottom:28px}aside .brand b{color:#fff}aside .brand span{color:#94a3b8}
+nav{display:flex;flex-direction:column;gap:4px}
+nav button{display:flex;align-items:center;gap:12px;background:none;border:0;color:#cbd5e1;padding:12px 14px;border-radius:10px;font-size:14px;font-weight:500;text-align:left;transition:background .2s,color .2s}
+nav button:hover{background:rgba(255,255,255,.07);color:#fff}
+nav button.active{background:rgba(201,162,75,.16);color:var(--gold2);box-shadow:inset 3px 0 0 var(--gold)}
+.side-foot{margin-top:auto;font-size:12px;color:#7d8aa3;padding:0 10px}
+.shade{display:none;position:fixed;inset:0;background:rgba(8,22,43,.5);z-index:25}
+.top{position:sticky;top:0;z-index:20;margin-left:250px;height:64px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;gap:12px}
+.top h2{margin:0;font-size:18px;color:var(--navy)}
+.tl,.tr{display:flex;align-items:center;gap:14px}
+.ib{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;color:var(--ink);position:relative}
+.ib.dot::after{content:"";position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--gold);border:2px solid #fff}
+#burger{display:none}
+.me{display:flex;align-items:center;gap:10px;padding-left:14px;border-left:1px solid var(--line)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--navy);color:var(--gold2);display:grid;place-items:center;font-weight:600}
+.me b{display:block;font-size:13px}.me span{font-size:12px;color:var(--mute)}
+main{margin-left:250px;padding:28px}
+
+/* components */
+.card{background:var(--card);border-radius:var(--r);box-shadow:0 1px 2px rgba(11,31,58,.05),0 8px 24px rgba(11,31,58,.05);padding:22px;margin-bottom:20px}
+.card h3{margin:0 0 4px;font-size:16px;color:var(--navy)}.card .sub{color:var(--mute);margin:0 0 16px;font-size:13px}
+.hero{background:linear-gradient(120deg,var(--navy),var(--navy2));color:#fff;border-radius:var(--r);padding:28px;margin-bottom:20px;border-bottom:3px solid var(--gold)}
+.hero h1{margin:0 0 6px;font-size:24px;letter-spacing:-.4px}.hero p{margin:0;color:#cbd5e1}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:20px}
+.stat{background:#fff;border-radius:var(--r);padding:20px;display:flex;gap:14px;align-items:center;box-shadow:0 1px 2px rgba(11,31,58,.05),0 8px 24px rgba(11,31,58,.05)}
+.stat .ic{width:46px;height:46px;border-radius:12px;background:rgba(201,162,75,.15);color:#8a6a1f;display:grid;place-items:center}
+.stat span{color:var(--mute);font-size:13px}.stat p{margin:2px 0 0;font-size:26px;font-weight:700;color:var(--navy)}
+.g2{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}.g2b{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.split{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+.bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+.bar .grow{flex:1;min-width:200px;position:relative}.bar .grow svg{position:absolute;left:12px;top:12px;color:var(--mute)}.bar .grow input{padding-left:38px}
+.bar select{width:auto;min-width:150px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:13px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;font-weight:600;color:var(--mute);background:#f8fafc}
+tr:last-child td{border-bottom:0}
+.badge{display:inline-block;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:600}
+.b-ok{background:var(--okbg);color:var(--ok)}.b-warn{background:var(--warnbg);color:var(--warn)}.b-bad{background:var(--badbg);color:var(--bad)}
+.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}
+.hc{background:#fff;border-radius:var(--r);padding:20px;box-shadow:0 1px 2px rgba(11,31,58,.05),0 8px 24px rgba(11,31,58,.05);border-top:3px solid var(--gold)}
+.hc h3{margin:0 0 2px;color:var(--navy);font-size:17px}.hc .c{color:var(--mute);font-size:13px;margin-bottom:16px}
+.hc .n{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-bottom:8px}.hc .n b{color:var(--ink)}
+.meter{height:7px;background:#eef1f6;border-radius:9px;overflow:hidden}.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:9px}
+.oc{display:grid;grid-template-columns:1fr auto;gap:6px 10px;margin-bottom:14px}.oc .meter{grid-column:1/-1}
+.empty{text-align:center;color:var(--mute);padding:34px 10px}
+.chart{position:relative;height:260px}
+.skel{height:90px;border-radius:var(--r);background:linear-gradient(90deg,#e9edf4,#f6f8fb,#e9edf4);background-size:200% 100%;animation:sk 1.2s infinite;margin-bottom:20px}
+@keyframes sk{to{background-position:-200% 0}}
+.pg{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;flex-wrap:wrap}
+.pg h1{margin:0;font-size:22px;color:var(--navy)}.pg p{margin:4px 0 0;color:var(--mute)}
+.modal{position:fixed;inset:0;background:rgba(8,22,43,.55);display:grid;place-items:center;z-index:50;padding:16px;animation:fd .2s}
+.mbox{background:#fff;border-radius:16px;padding:26px;width:100%;max-width:460px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.mbox h3{margin:0 0 16px;color:var(--navy);font-size:18px}.macts{display:flex;gap:10px;justify-content:flex-end;margin-top:8px}
+@keyframes fd{from{opacity:0}}
+#toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:10px;z-index:60}
+.toast{background:var(--navy);color:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);border-left:4px solid var(--gold);max-width:340px;animation:fd .25s}
+.toast.bad{border-left-color:#ef4444}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+
+@media(max-width:1100px){.stats{grid-template-columns:repeat(2,1fr)}.g2,.g2b,.split{grid-template-columns:1fr}}
+@media(max-width:860px){
+ #login-box{grid-template-columns:1fr}.l-art{display:none}
+ aside{transform:translateX(-100%)}aside.open{transform:none}.shade.open{display:block}
+ .top,main{margin-left:0}.top{padding:0 16px}main{padding:18px 14px}#burger{display:grid}
+ .me div{display:none}.me{padding-left:10px}.fgrid{grid-template-columns:1fr}
+}
+@media(max-width:520px){.stats{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-box">
+  <div class="l-art" style="background-image:linear-gradient(160deg,#0b1f3a,#13305a),url('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1400&q=70');background-blend-mode:normal">
+    <div><hr><h2>Every guest, every room, one calm view.</h2><p>Run your hotel chain with live occupancy, reservations and revenue in a single place.</p></div>
+  </div>
+  <div class="l-form">
+    <div class="l-card">
+      <div class="brand"><div class="logo" data-ic="hotel"></div><div><b>Hotel Chain Manager</b><span>Luxury management suite</span></div></div>
+      <h1>Welcome back</h1><p>Sign in to manage your properties.</p>
+      <div id="login-err" class="err" role="alert"></div>
+      <div class="fld"><label class="f" for="user">Username</label><input id="user" placeholder="Enter your username" autocomplete="username"></div>
+      <div class="fld"><label class="f" for="pass">Password</label>
+        <div class="pw"><input id="pass" type="password" placeholder="Enter your password" autocomplete="current-password"><button type="button" id="eye" onclick="togglePw()" aria-label="Show or hide password" data-ic="eye"></button></div></div>
+      <div class="row"><label><input type="checkbox"> Remember me</label><a onclick="toast('Please contact your administrator to reset your password.')">Forgot password?</a></div>
+      <button class="btn gold full" id="login-btn" onclick="login()">Sign in</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <aside id="side">
+    <div class="brand"><div class="logo" data-ic="hotel"></div><div><b>Hotel Chain Manager</b><span>Luxury management suite</span></div></div>
+    <nav>
+      <button onclick="show('dashboard',this)" data-tab="dashboard" class="active"><span data-ic="dash"></span>Dashboard</button>
+      <button onclick="show('hotels',this)" data-tab="hotels"><span data-ic="hotel"></span>Hotels</button>
+      <button onclick="show('guests',this)" data-tab="guests"><span data-ic="users"></span>Guests</button>
+      <button onclick="show('rooms',this)" data-tab="rooms"><span data-ic="bed"></span>Rooms</button>
+      <button onclick="show('reservations',this)" data-tab="reservations"><span data-ic="cal"></span>Reservations</button>
+      <button onclick="show('reports',this)" data-tab="reports"><span data-ic="chart"></span>Revenue Reports</button>
+    </nav>
+    <div class="side-foot">Signed in securely</div>
+  </aside>
+  <div class="shade" id="shade" onclick="toggleSide()"></div>
+  <header class="top">
+    <div class="tl"><button class="ib" id="burger" onclick="toggleSide()" aria-label="Open menu" data-ic="menu"></button><h2 id="ptitle">Dashboard</h2></div>
+    <div class="tr">
+      <button class="ib dot" aria-label="Notifications" data-ic="bell"></button>
+      <div class="me"><div class="av" id="av">A</div><div><b id="who"></b><span>Administrator</span></div></div>
+      <button class="btn ghost" onclick="logout()"><span data-ic="out"></span>Logout</button>
+    </div>
+  </header>
+  <main id="content"></main>
+</div>
+<div id="toasts"></div>
+
+<script>
+let currentTab = 'dashboard';
+let charts = [], D = {};
+const TITLES = {dashboard:'Dashboard',hotels:'Hotels',guests:'Guests',rooms:'Rooms',reservations:'Reservations',reports:'Revenue Reports'};
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => '₹' + Number(n || 0).toLocaleString('en-IN');
+const ICONS = {
+ hotel:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1M10 21v-4h4v4"/>',
+ dash:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+ users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+ bed:'<path d="M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8M2 17h20M6 10V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4"/>',
+ cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+ chart:'<path d="M3 3v18h18M7 15l4-4 3 3 5-6"/>',
+ bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+ out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+ menu:'<path d="M3 6h18M3 12h18M3 18h18"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+ eye:'<path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8z"/><circle cx="12" cy="12" r="3"/>',
+ check:'<path d="M20 6 9 17l-5-5"/>',
+ pie:'<path d="M21 12A9 9 0 1 1 12 3v9z"/>',
+ rupee:'<path d="M6 3h12M6 8h12M6 13l8.5 8M6 13h3a4 4 0 0 0 0-10"/>'
+};
+const ic = n => `<svg class="i" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
+function paintIcons(root) { (root || document).querySelectorAll('[data-ic]').forEach(e => { if (!e.dataset.done) { e.insertAdjacentHTML('afterbegin', ic(e.dataset.ic)); e.dataset.done = 1; } }); }
+function toast(msg, bad) { const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.textContent = msg; $('toasts').appendChild(t); setTimeout(() => t.remove(), 4500); }
+function badge(s) { const t = String(s || '').toUpperCase(); const c = /AVAIL|ACTIVE|CONFIRM/.test(t) ? 'ok' : /CANCEL|MAINT|INACTIVE|OUT/.test(t) ? 'bad' : 'warn'; return `<span class="badge b-${c}">${esc(s)}</span>`; }
+async function api(url, method, body) {
+  const r = await fetch(url, { method: method || 'GET', credentials: 'include',
+    headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined });
+  let d = null; try { d = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((d && d.error) || 'Request failed (' + r.status + ')');
+  return d;
+}
+function togglePw() { const p = $('pass'); p.type = p.type === 'password' ? 'text' : 'password'; }
+function toggleSide() { $('side').classList.toggle('open'); $('shade').classList.toggle('open'); }
+function openModal(html) { const m = document.createElement('div'); m.className = 'modal'; m.id = 'modal'; m.innerHTML = `<div class="mbox">${html}</div>`; m.addEventListener('click', e => { if (e.target === m) closeModal(); }); document.body.appendChild(m); paintIcons(m); }
+function closeModal() { const m = $('modal'); if (m) m.remove(); }
+const empty = (t) => `<div class="empty">${t}</div>`;
+const norm = s => String(s ?? '').toLowerCase();
+
+/* ---------- auth ---------- */
+async function login() {
+  const u = $('user').value, p = $('pass').value, err = $('login-err'), b = $('login-btn');
+  err.innerText = '';
+  if (!u.trim() || !p) { err.innerText = 'Enter your username and password.'; return; }
+  b.disabled = true; b.innerHTML = '<span class="spin"></span> Signing in…';
+  try {
+    const r = await fetch('/api/login', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p}) });
+    const d = await r.json();
+    if (r.ok) { startApp(d.user); } else { err.innerText = d.error || 'Login failed. Check your details and try again.'; }
+  } catch (e) { err.innerText = 'Cannot reach the server. Make sure Flask is running.'; }
+  b.disabled = false; b.innerHTML = 'Sign in';
+}
+async function logout() {
+  try { await fetch('/api/logout', {method:'POST', credentials:'include'}); } catch (e) {}
+  location.reload();
+}
+async function startApp(name) {
+  $('login-box').style.display = 'none';
+  $('app').style.display = 'block';
+  $('who').innerText = name;
+  $('av').innerText = String(name || 'A').charAt(0).toUpperCase();
+  show('dashboard', document.querySelector('nav button'));
+}
+['user', 'pass'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') login(); }));
+
+/* ---------- navigation ---------- */
+function show(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  (btn || document.querySelector(`nav button[data-tab="${tab}"]`)).classList.add('active');
+  $('ptitle').innerText = TITLES[tab];
+  if ($('side').classList.contains('open')) toggleSide();
+  window.scrollTo(0, 0);
+  loadTab();
+}
+function killCharts() { charts.forEach(c => c.destroy()); charts = []; }
+function head(title, sub, action) { return `<div class="pg"><div><h1>${title}</h1><p>${sub}</p></div>${action || ''}</div>`; }
+function search(id, ph) { return `<div class="grow">${ic('search')}<input id="${id}" placeholder="${ph}"></div>`; }
+function wire(ids, fn) { ids.forEach(id => $(id).addEventListener('input', fn)); fn(); }
+const ChartOpts = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } };
+
+async function loadTab() {
+  const c = $('content');
+  killCharts();
+  c.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+  const tab = currentTab;
+  try {
+    if (tab === 'dashboard') {
+      const [d, res, rev] = await Promise.all([api('/api/dashboard'), api('/api/reservations'), api('/api/revenue/hotels')]);
+      if (tab !== currentTab) return;
+      const occupied = Number(d.rooms) - Number(d.available);
+      c.innerHTML = `
+        <div class="hero"><h1>Welcome back, ${esc($('who').innerText)}</h1><p>Here is how your hotels are doing today.</p></div>
+        <div class="stats">
+          <div class="stat"><div class="ic">${ic('hotel')}</div><div><span>Total Hotels</span><p>${esc(d.hotels)}</p></div></div>
+          <div class="stat"><div class="ic">${ic('bed')}</div><div><span>Total Rooms</span><p>${esc(d.rooms)}</p></div></div>
+          <div class="stat"><div class="ic">${ic('check')}</div><div><span>Available Rooms</span><p>${esc(d.available)}</p></div></div>
+          <div class="stat"><div class="ic">${ic('pie')}</div><div><span>Occupancy Rate</span><p>${esc(d.occupancy)}%</p></div></div>
+        </div>
+        <div class="g2">
+          <div class="card"><h3>Recent reservations</h3><p class="sub">Latest bookings across all hotels</p>
+            <div class="tw">${res.length ? `<table><tr><th>Booking Ref</th><th>Guest</th><th>Hotel</th><th>Check In</th><th>Status</th></tr>
+            ${res.slice(0, 6).map(r => `<tr><td><b>${esc(r.booking_ref)}</b></td><td>${esc(r.guest)}</td><td>${esc(r.hotel)}</td><td>${esc(r.check_in_date)}</td><td>${badge(r.status)}</td></tr>`).join('')}</table>` : empty('No reservations yet. Create one from the Reservations page.')}</div></div>
+          <div class="card"><h3>Room status</h3><p class="sub">Available vs occupied rooms</p><div class="chart"><canvas id="ch1"></canvas></div></div>
+        </div>
+        <div class="g2b">
+          <div class="card"><h3>Revenue by hotel</h3><p class="sub">Total revenue per property</p>${rev.length ? '<div class="chart"><canvas id="ch2"></canvas></div>' : empty('No revenue data yet.')}</div>
+          <div class="card"><h3>Hotel occupancy</h3><p class="sub">Share of rooms occupied per hotel</p>
+            ${rev.length ? rev.map(r => `<div class="oc"><b>${esc(r.label)}</b><span>${esc(r.occupancy)}%</span><div class="meter"><i style="width:${Math.min(100, Number(r.occupancy) || 0)}%"></i></div></div>`).join('') : empty('No hotels to show yet.')}</div>
+        </div>`;
+      charts.push(new Chart($('ch1'), { type:'doughnut', data:{ labels:['Available','Occupied'], datasets:[{ data:[Number(d.available), occupied], backgroundColor:['#c9a24b','#0b1f3a'], borderWidth:0 }] }, options:{ ...ChartOpts, cutout:'68%', plugins:{ legend:{ display:true, position:'bottom' } } } }));
+      if (rev.length) charts.push(new Chart($('ch2'), { type:'bar', data:{ labels:rev.map(r => r.label), datasets:[{ data:rev.map(r => Number(r.revenue)), backgroundColor:'#13305a', borderRadius:8 }] }, options:ChartOpts }));
+    }
+
+    else if (tab === 'hotels') {
+      D.hotels = await api('/api/hotels'); if (tab !== currentTab) return;
+      const cities = [...new Set(D.hotels.map(h => h.city).filter(Boolean))];
+      c.innerHTML = head('Hotels', 'Your properties and their room availability.', `<button class="btn gold" onclick="hotelModal()">${ic('plus')}Add New Hotel</button>`) +
+        `<div class="bar">${search('hq', 'Search hotels')}<select id="hc"><option value="">All cities</option>${cities.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></div><div id="hl" class="hgrid"></div>`;
+      wire(['hq', 'hc'], () => {
+        const q = norm($('hq').value), city = $('hc').value;
+        const l = D.hotels.filter(h => (!q || norm(h.hotel_name).includes(q) || norm(h.city).includes(q)) && (!city || h.city === city));
+        $('hl').innerHTML = l.length ? l.map(h => { const used = Number(h.rooms) - Number(h.available), pct = Number(h.rooms) ? Math.round(used / h.rooms * 100) : 0;
+          return `<div class="hc"><h3>${esc(h.hotel_name)}</h3><div class="c">${esc(h.city || 'City not set')} · ID ${esc(h.hotel_id)}</div>
+          <div class="n"><span>Total rooms</span><b>${esc(h.rooms)}</b></div><div class="n"><span>Available rooms</span><b>${esc(h.available)}</b></div>
+          <div class="meter"><i style="width:${pct}%"></i></div></div>`; }).join('') : `<div class="card" style="grid-column:1/-1">${empty('No hotels match your search.')}</div>`;
+      });
+    }
+
+    else if (tab === 'guests') {
+      D.guests = await api('/api/guests'); if (tab !== currentTab) return;
+      c.innerHTML = head('Guests', 'Register guests and find them quickly.') + `<div class="split">
+        <div class="card"><h3>Register a guest</h3><p class="sub">Details are saved to your guest list.</p>
+          <div class="fld"><label class="f" for="g_fn">First name</label><input id="g_fn" placeholder="First name"></div>
+          <div class="fld"><label class="f" for="g_ln">Last name</label><input id="g_ln" placeholder="Last name"></div>
+          <div class="fld"><label class="f" for="g_em">Email</label><input id="g_em" type="email" placeholder="name@example.com"></div>
+          <div class="fld"><label class="f" for="g_ph">Phone</label><input id="g_ph" placeholder="Phone number"></div>
+          <button class="btn gold full" onclick="addGuest()">Add Guest</button></div>
+        <div class="card"><div class="bar">${search('gq', 'Search by name, email or phone')}</div><div class="tw"><table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th></tr></thead><tbody id="gl"></tbody></table></div></div></div>`;
+      wire(['gq'], () => { const q = norm($('gq').value);
+        const l = D.guests.filter(g => !q || norm(g.first_name + ' ' + g.last_name + ' ' + g.email + ' ' + g.phone).includes(q));
+        $('gl').innerHTML = l.length ? l.map(g => `<tr><td>${esc(g.guest_id)}</td><td><b>${esc(g.first_name)} ${esc(g.last_name)}</b></td><td>${esc(g.email)}</td><td>${esc(g.phone)}</td></tr>`).join('') : `<tr><td colspan="4">${empty('No guests found.')}</td></tr>`; });
+    }
+
+    else if (tab === 'rooms') {
+      D.rooms = await api('/api/rooms'); if (tab !== currentTab) return;
+      const hs = [...new Set(D.rooms.map(r => r.hotel_name))], ss = [...new Set(D.rooms.map(r => r.status))];
+      c.innerHTML = head('Rooms', 'Room types, rates and availability.') + `<div class="card"><div class="bar">${search('rq', 'Search room number or type')}
+        <select id="rh"><option value="">All hotels</option>${hs.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select>
+        <select id="rs"><option value="">All statuses</option>${ss.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></div>
+        <div class="tw"><table><thead><tr><th>ID</th><th>Hotel</th><th>Room No</th><th>Type</th><th>Price/Night</th><th>Status</th></tr></thead><tbody id="rl"></tbody></table></div></div>`;
+      wire(['rq', 'rh', 'rs'], () => { const q = norm($('rq').value), h = $('rh').value, s = $('rs').value;
+        const l = D.rooms.filter(r => (!q || norm(r.room_number + ' ' + r.type_name).includes(q)) && (!h || r.hotel_name === h) && (!s || r.status === s));
+        $('rl').innerHTML = l.length ? l.map(r => `<tr><td>${esc(r.room_id)}</td><td>${esc(r.hotel_name)}</td><td><b>${esc(r.room_number)}</b></td><td>${esc(r.type_name)}</td><td>${money(r.price_per_night)}</td><td>${badge(r.status)}</td></tr>`).join('') : `<tr><td colspan="6">${empty('No rooms match your filters.')}</td></tr>`; });
+    }
+
+    else if (tab === 'reservations') {
+      const [res, guests, rooms] = await Promise.all([api('/api/reservations'), api('/api/guests'), api('/api/rooms')]);
+      if (tab !== currentTab) return; D.res = res;
+      c.innerHTML = head('Reservations', 'Book a room and review every booking.') + `
+        <div class="card"><h3>New booking</h3><p class="sub">Pick a guest, a room and the stay dates.</p>
+          <div class="fgrid">
+            <div class="fld"><label class="f" for="b_guest">Guest</label><select id="b_guest">${guests.length ? guests.map(g => `<option value="${esc(g.guest_id)}">${esc(g.first_name)} ${esc(g.last_name)}</option>`).join('') : '<option value="">No guests yet</option>'}</select></div>
+            <div class="fld"><label class="f" for="b_room">Room</label><select id="b_room">${rooms.length ? rooms.map(r => `<option value="${esc(r.room_id)}">Room ${esc(r.room_number)} (${esc(r.hotel_name)}) - ${money(r.price_per_night)}</option>`).join('') : '<option value="">No rooms yet</option>'}</select></div>
+            <div class="fld"><label class="f" for="b_ci">Check-in date</label><input id="b_ci" type="date"></div>
+            <div class="fld"><label class="f" for="b_co">Check-out date</label><input id="b_co" type="date"></div>
+          </div><button class="btn gold" onclick="bookRoom()">Confirm Booking</button></div>
+        <div class="card"><h3>Reservation history</h3><div class="bar" style="margin-top:12px">${search('sq', 'Search reference, guest or hotel')}</div>
+          <div class="tw"><table><thead><tr><th>Booking Ref</th><th>Guest</th><th>Hotel</th><th>Check In</th><th>Check Out</th><th>Status</th></tr></thead><tbody id="sl"></tbody></table></div></div>`;
+      wire(['sq'], () => { const q = norm($('sq').value);
+        const l = D.res.filter(r => !q || norm(r.booking_ref + ' ' + r.guest + ' ' + r.hotel).includes(q));
+        $('sl').innerHTML = l.length ? l.map(r => `<tr><td><b>${esc(r.booking_ref)}</b></td><td>${esc(r.guest)}</td><td>${esc(r.hotel)}</td><td>${esc(r.check_in_date)}</td><td>${esc(r.check_out_date)}</td><td>${badge(r.status)}</td></tr>`).join('') : `<tr><td colspan="6">${empty('No reservations found.')}</td></tr>`; });
+    }
+
+    else if (tab === 'reports') {
+      const rev = await api('/api/revenue/hotels'); if (tab !== currentTab) return;
+      const sum = k => rev.reduce((a, r) => a + Number(r[k] || 0), 0), tr = sum('rooms'), to = sum('occupied');
+      c.innerHTML = head('Revenue Reports', 'Revenue and occupancy for every hotel.') + `
+        <div class="stats">
+          <div class="stat"><div class="ic">${ic('rupee')}</div><div><span>Total revenue</span><p>${money(sum('revenue'))}</p></div></div>
+          <div class="stat"><div class="ic">${ic('bed')}</div><div><span>Total rooms</span><p>${tr}</p></div></div>
+          <div class="stat"><div class="ic">${ic('check')}</div><div><span>Occupied rooms</span><p>${to}</p></div></div>
+          <div class="stat"><div class="ic">${ic('pie')}</div><div><span>Overall occupancy</span><p>${tr ? Math.round(to / tr * 100) : 0}%</p></div></div>
+        </div>
+        <div class="g2b"><div class="card"><h3>Revenue by hotel</h3><p class="sub">Total revenue per property</p>${rev.length ? '<div class="chart"><canvas id="rc1"></canvas></div>' : empty('No revenue data yet.')}</div>
+        <div class="card"><h3>Occupancy by hotel</h3><p class="sub">Occupancy percentage per property</p>${rev.length ? '<div class="chart"><canvas id="rc2"></canvas></div>' : empty('No occupancy data yet.')}</div></div>
+        <div class="card"><h3>Hotel breakdown</h3><div class="tw"><table style="margin-top:10px"><tr><th>Hotel Name</th><th>Revenue</th><th>Total Rooms</th><th>Occupied</th><th>Occupancy %</th></tr>
+          ${rev.length ? rev.map(r => `<tr><td><b>${esc(r.label)}</b></td><td>${money(r.revenue)}</td><td>${esc(r.rooms)}</td><td>${esc(r.occupied)}</td><td style="min-width:150px"><div class="oc" style="margin:0"><span>${esc(r.occupancy)}%</span><span></span><div class="meter"><i style="width:${Math.min(100, Number(r.occupancy) || 0)}%"></i></div></div></td></tr>`).join('') : `<tr><td colspan="5">${empty('No data yet.')}</td></tr>`}</table></div></div>`;
+      if (rev.length) {
+        charts.push(new Chart($('rc1'), { type:'bar', data:{ labels:rev.map(r => r.label), datasets:[{ data:rev.map(r => Number(r.revenue)), backgroundColor:'#13305a', borderRadius:8 }] }, options:ChartOpts }));
+        charts.push(new Chart($('rc2'), { type:'bar', data:{ labels:rev.map(r => r.label), datasets:[{ data:rev.map(r => Number(r.occupancy)), backgroundColor:'#c9a24b', borderRadius:8 }] }, options:{ ...ChartOpts, scales:{ y:{ beginAtZero:true, max:100 } } } }));
+      }
+    }
+  } catch (e) {
+    c.innerHTML = `<div class="card"><div class="err" style="display:block">Could not load data: ${esc(e.message)}. Check that Flask is running in your terminal, or sign in again.</div><button class="btn navy" onclick="loadTab()">Try again</button></div>`;
+  }
+}
+
+/* ---------- actions (same endpoints, methods and JSON keys as before) ---------- */
+function hotelModal() {
+  openModal(`<h3>Add new hotel</h3>
+    <div class="fld"><label class="f" for="h_name">Hotel name</label><input id="h_name" placeholder="e.g. Taj"></div>
+    <div class="fld"><label class="f" for="h_city">City</label><input id="h_city" placeholder="e.g. Mumbai"></div>
+    <div class="macts"><button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn gold" id="h_btn" onclick="addHotel()">Add Hotel</button></div>`);
+  $('h_name').focus();
+}
+async function addHotel() {
+  const name = $('h_name').value.trim(), city = $('h_city').value.trim();
+  if (!name) { toast('Enter a hotel name.', true); return; }
+  $('h_btn').disabled = true;
+  try {
+    await api('/api/hotels', 'POST', {hotel_name:name, city:city, status:'ACTIVE'});
+    closeModal(); toast('Hotel added.'); loadTab();
+  } catch (e) { toast(e.message, true); $('h_btn').disabled = false; }
+}
+async function addGuest() {
+  const fn = $('g_fn').value.trim(), ln = $('g_ln').value.trim();
+  if (!fn || !ln) { toast('Enter the guest\'s first and last name.', true); return; }
+  try {
+    await api('/api/guests', 'POST', {first_name:fn, last_name:ln, email:$('g_em').value, phone:$('g_ph').value});
+    toast('Guest added.'); loadTab();
+  } catch (e) { toast(e.message, true); }
+}
+async function bookRoom() {
+  const g = $('b_guest').value, r = $('b_room').value, ci = $('b_ci').value, co = $('b_co').value;
+  if (!g || !r) { toast('Choose a guest and a room.', true); return; }
+  if (!ci || !co) { toast('Choose check-in and check-out dates.', true); return; }
+  if (co <= ci) { toast('Check-out must be after check-in.', true); return; }
+  try {
+    const d = await api('/api/reservations', 'POST', {guest_id:g, room_id:r, check_in:ci, check_out:co, num_guests:1});
+    toast('Booking confirmed. Ref: ' + d.booking_ref); loadTab();
+  } catch (e) { toast(e.message, true); }
+}
+
+paintIcons();
+// Auto-login if already logged in
+fetch('/api/me', {credentials:'include'}).then(r => r.json()).then(d => { if (d.user) startApp(d.user); }).catch(() => {});
+</script>
+</body>
+</html>
