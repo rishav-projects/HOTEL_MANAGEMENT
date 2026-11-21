@@ -1,11 +1,14 @@
 """
 Hotel Chain Reservation & Revenue Management System - Flask backend.
-Every route talks to Oracle directly. Business rules live in PL/SQL
-(sp_book_room, sp_cancel_reservation ...), Flask only passes data.
+PostgreSQL version. Every route talks to the database directly. Business rules
+live in database functions (sp_book_room, sp_cancel_reservation ...),
+Flask only passes data.
 """
 import re
+from contextlib import contextmanager
 from datetime import datetime, date
-import oracledb
+from decimal import Decimal
+import psycopg2
 from flask import Flask, jsonify, request, session, render_template
 import config
 
@@ -13,48 +16,65 @@ app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 
 # ------------------------- database helpers -----------------------------
+@contextmanager
 def conn():
-    return oracledb.connect(user=config.DB_USER, password=config.DB_PASSWORD, dsn=config.DB_DSN)
+    """Open a connection, COMMIT if all is fine, ROLLBACK on error, always close."""
+    c = psycopg2.connect(config.DATABASE_URL, options='-c timezone=Asia/Kolkata')
+    try:
+        yield c
+        c.commit()
+    except Exception:
+        c.rollback()
+        raise
+    finally:
+        c.close()
+
+def fix(sql):
+    """Turn :name placeholders into psycopg2's %(name)s placeholders."""
+    return re.sub(r'(?<![:\w]):(\w+)', r'%(\1)s', sql)
 
 def clean(v):
-    """Make Oracle values JSON friendly (dates -> text)."""
-    return v.strftime('%Y-%m-%d') if isinstance(v, (datetime, date)) else v
+    """Make database values JSON friendly (dates -> text, Decimal -> number)."""
+    if isinstance(v, (datetime, date)):
+        return v.strftime('%Y-%m-%d')
+    if isinstance(v, Decimal):
+        return int(v) if v == v.to_integral_value() else float(v)
+    return v
 
 def query(sql, p=None):
     """Run a SELECT, return list of dicts with lower-case keys."""
     with conn() as c:
         cur = c.cursor()
-        cur.execute(sql, p or {})
+        cur.execute(fix(sql), p or None)
         cols = [d[0].lower() for d in cur.description]
         return [{k: clean(v) for k, v in zip(cols, row)} for row in cur.fetchall()]
 
 def execute(sql, p=None):
-    """Run INSERT/UPDATE/DELETE and COMMIT."""
+    """Run INSERT/UPDATE/DELETE (committed automatically by conn())."""
     with conn() as c:
         cur = c.cursor()
-        cur.execute(sql, p or {})
-        c.commit()
+        cur.execute(fix(sql), p or None)
 
-def plsql(block, p):
-    """Run an anonymous PL/SQL block that calls a stored procedure."""
+def scalar(sql, p=None):
+    """Run a statement like SELECT some_function(...) and return its single value."""
     with conn() as c:
         cur = c.cursor()
-        cur.execute(block, p)
-        return cur
+        cur.execute(fix(sql), p or None)
+        return cur.fetchone()[0]
 
 def to_date(s):
-    return datetime.strptime(s, '%Y-%m-%d')
+    return datetime.strptime(s, '%Y-%m-%d').date()
 
-@app.errorhandler(oracledb.DatabaseError)
+@app.errorhandler(psycopg2.Error)
 def db_error(e):
-    msg = str(e.args[0].message if e.args and hasattr(e.args[0], 'message') else e)
-    if 'ORA-02292' in msg:
+    msg = (e.diag.message_primary if getattr(e, 'diag', None) else None) or str(e)
+    code = getattr(e, 'pgcode', None)
+    if code == '23503' and 'update or delete' in msg:
         msg = 'Cannot delete: related records exist (foreign key).'
-    elif 'ORA-00001' in msg:
+    elif code == '23505':
         msg = 'Duplicate value: a record with this unique value already exists.'
     else:
-        m = re.search(r'ORA-200\d\d: (.*)', msg)
-        msg = m.group(1).split('\n')[0] if m else msg.split('\n')[0]
+        msg = msg.split('\n')[0]
     return jsonify(error=msg), 400
 
 # ------------------------------ login -----------------------------------
@@ -113,8 +133,8 @@ def crud(name, table, pk, fields, list_sql):
 
 crud('hotels', 'hotel', 'hotel_id',
      ['hotel_name', 'city', 'state', 'address', 'phone', 'email', 'star_rating', 'status'],
-     """SELECT h.*, (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id) rooms,
-               (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id AND r.status='AVAILABLE') available
+     """SELECT h.*, (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id) AS rooms,
+               (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id AND r.status='AVAILABLE') AS available
           FROM hotel h ORDER BY hotel_id""")
 crud('guests', 'guest', 'guest_id',
      ['first_name', 'last_name', 'email', 'phone', 'address', 'id_proof_type', 'id_proof_no'],
@@ -140,11 +160,11 @@ def guest_history(i):
 @app.get('/api/availability')
 def availability():
     a = request.args
-    p = {'h': a['hotel_id'], 'ci': to_date(a['check_in']), 'co': to_date(a['check_out'])}
+    p = {'h': int(a['hotel_id']), 'ci': to_date(a['check_in']), 'co': to_date(a['check_out'])}
     sql = """SELECT r.room_id, r.room_number, r.floor_no, r.price_per_night, r.status, t.type_name
                FROM room r JOIN room_type t ON t.type_id = r.type_id
               WHERE r.hotel_id = :h
-                AND NOT (r.status = 'MAINTENANCE' AND :ci <= TRUNC(SYSDATE))
+                AND NOT (r.status = 'MAINTENANCE' AND :ci <= CURRENT_DATE)
                 AND NOT EXISTS (SELECT 1 FROM reservation_room x
                                  WHERE x.room_id = r.room_id AND x.status = 'ACTIVE'
                                    AND x.check_in_date < :co AND x.check_out_date > :ci)
@@ -159,37 +179,32 @@ def reservations():
 @app.post('/api/reservations')
 def book():
     j = request.json
-    with conn() as c:
-        cur = c.cursor()
-        ref = cur.var(str)
-        cur.execute("BEGIN sp_book_room(:g,:h,:r,:ci,:co,:n,:ref); END;",
-                    dict(g=j['guest_id'], h=j['hotel_id'], r=j['room_id'], ci=to_date(j['check_in']),
-                         co=to_date(j['check_out']), n=j.get('num_guests') or 1, ref=ref))
-        return jsonify(booking_ref=ref.getvalue())
+    ref = scalar("SELECT sp_book_room(:g,:h,:r,:ci,:co,:n)",
+                 dict(g=int(j['guest_id']), h=int(j['hotel_id']), r=int(j['room_id']),
+                      ci=to_date(j['check_in']), co=to_date(j['check_out']),
+                      n=int(j.get('num_guests') or 1)))
+    return jsonify(booking_ref=ref)
 
 @app.post('/api/reservations/<int:i>/cancel')
 def cancel(i):
-    with conn() as c:
-        cur = c.cursor()
-        refund = cur.var(float)
-        cur.execute("BEGIN sp_cancel_reservation(:i,'CASH',:rf); END;", dict(i=i, rf=refund))
-        return jsonify(refund=refund.getvalue())
+    refund = scalar("SELECT sp_cancel_reservation(:i,'CASH')", dict(i=i))
+    return jsonify(refund=float(refund))
 
 @app.post('/api/reservations/<int:i>/checkin')
 def checkin(i):
-    plsql("BEGIN sp_check_in(:i); END;", dict(i=i))
+    scalar("SELECT sp_check_in(:i)", dict(i=i))
     return jsonify(ok=True)
 
 @app.post('/api/reservations/<int:i>/checkout')
 def checkout(i):
-    plsql("BEGIN sp_check_out(:i); END;", dict(i=i))
+    scalar("SELECT sp_check_out(:i)", dict(i=i))
     return jsonify(ok=True)
 
 @app.get('/api/calendar')
 def calendar():
     y, m = map(int, request.args['month'].split('-'))
-    start = datetime(y, m, 1)
-    end = datetime(y + (m == 12), m % 12 + 1, 1)
+    start = date(y, m, 1)
+    end = date(y + (m == 12), m % 12 + 1, 1)
     return jsonify(query("""SELECT booking_ref, guest, hotel, check_in_date, check_out_date, status
                               FROM v_booking_summary
                              WHERE status <> 'CANCELLED' AND check_in_date < :e AND check_out_date > :s""",
@@ -207,16 +222,16 @@ def usage_list():
 @app.post('/api/service-usage')
 def usage_add():
     j = request.json
-    plsql("BEGIN sp_add_service(:r,:s,:q); END;",
-          dict(r=j['reservation_id'], s=j['service_id'], q=j.get('quantity') or 1))
+    scalar("SELECT sp_add_service(:r,:s,:q)",
+           dict(r=int(j['reservation_id']), s=int(j['service_id']), q=int(j.get('quantity') or 1)))
     return jsonify(ok=True)
 
 # --------------------------- billing / payments --------------------------
 @app.get('/api/invoices')
 def invoices():
-    return jsonify(query("""SELECT i.*, r.booking_ref, g.first_name||' '||g.last_name guest,
-                   NVL((SELECT SUM(DECODE(payment_type,'REFUND',-amount,amount)) FROM payment p
-                         WHERE p.invoice_id=i.invoice_id),0) paid
+    return jsonify(query("""SELECT i.*, r.booking_ref, g.first_name||' '||g.last_name AS guest,
+                   COALESCE((SELECT SUM(CASE WHEN payment_type='REFUND' THEN -amount ELSE amount END)
+                               FROM payment p WHERE p.invoice_id=i.invoice_id),0) AS paid
               FROM invoice i JOIN reservation r ON r.reservation_id=i.reservation_id
               JOIN guest g ON g.guest_id=r.guest_id ORDER BY i.invoice_id DESC"""))
 
@@ -229,8 +244,8 @@ def payments():
 @app.post('/api/payments')
 def pay():
     j = request.json
-    plsql("BEGIN sp_record_payment(:i,:a,'PAYMENT',:m); END;",
-          dict(i=j['invoice_id'], a=j['amount'], m=j['method']))
+    scalar("SELECT sp_record_payment(:i,:a,'PAYMENT',:m)",
+           dict(i=int(j['invoice_id']), a=float(j['amount']), m=j['method']))
     return jsonify(ok=True)
 
 # ----------------------------- housekeeping ------------------------------
@@ -238,13 +253,13 @@ def pay():
 def hk_list():
     return jsonify(query("""SELECT k.*, r.room_number, h.hotel_name FROM housekeeping k
               JOIN room r ON r.room_id=k.room_id JOIN hotel h ON h.hotel_id=r.hotel_id
-             ORDER BY DECODE(k.task_status,'CLEAN',2,1), k.task_id DESC"""))
+             ORDER BY CASE WHEN k.task_status='CLEAN' THEN 2 ELSE 1 END, k.task_id DESC"""))
 
 @app.post('/api/housekeeping')
 def hk_add():
     j = request.json
     execute("INSERT INTO housekeeping(room_id, assigned_to, notes) VALUES(:r,:a,:n)",
-            dict(r=j['room_id'], a=j.get('assigned_to'), n=j.get('notes')))
+            dict(r=int(j['room_id']), a=j.get('assigned_to') or None, n=j.get('notes') or None))
     return jsonify(ok=True)
 
 @app.post('/api/housekeeping/<int:i>/assign')
@@ -255,33 +270,33 @@ def hk_assign(i):
 
 @app.post('/api/housekeeping/<int:i>/complete')
 def hk_done(i):
-    plsql("BEGIN sp_complete_housekeeping(:i); END;", dict(i=i))
+    scalar("SELECT sp_complete_housekeeping(:i)", dict(i=i))
     return jsonify(ok=True)
 
 # ------------------------- dashboard & revenue ---------------------------
 @app.get('/api/dashboard')
 def dashboard():
-    s = query("""SELECT (SELECT COUNT(*) FROM hotel) hotels, (SELECT COUNT(*) FROM room) rooms,
-                 (SELECT COUNT(*) FROM room WHERE status='AVAILABLE') available,
-                 (SELECT COUNT(*) FROM reservation WHERE status IN ('BOOKED','CHECKED_IN')) active,
-                 (SELECT COUNT(*) FROM room WHERE status='OCCUPIED') occupied,
-                 (SELECT NVL(SUM(revenue),0) FROM v_revenue_daily) revenue FROM dual""")[0]
+    s = query("""SELECT (SELECT COUNT(*) FROM hotel) AS hotels, (SELECT COUNT(*) FROM room) AS rooms,
+                 (SELECT COUNT(*) FROM room WHERE status='AVAILABLE') AS available,
+                 (SELECT COUNT(*) FROM reservation WHERE status IN ('BOOKED','CHECKED_IN')) AS active,
+                 (SELECT COUNT(*) FROM room WHERE status='OCCUPIED') AS occupied,
+                 (SELECT COALESCE(SUM(revenue),0) FROM v_revenue_daily) AS revenue""")[0]
     s['occupancy'] = round(100 * s['occupied'] / s['rooms'], 1) if s['rooms'] else 0
     return jsonify(s)
 
 REVENUE = {
-    'daily': """SELECT TO_CHAR(day,'YYYY-MM-DD') label, SUM(revenue) revenue FROM v_revenue_daily
-                 WHERE day >= TRUNC(SYSDATE)-30 GROUP BY day ORDER BY day""",
-    'monthly': """SELECT TO_CHAR(day,'YYYY-MM') label, SUM(revenue) revenue FROM v_revenue_daily
+    'daily': """SELECT TO_CHAR(day,'YYYY-MM-DD') AS label, SUM(revenue) AS revenue FROM v_revenue_daily
+                 WHERE day >= CURRENT_DATE-30 GROUP BY day ORDER BY day""",
+    'monthly': """SELECT TO_CHAR(day,'YYYY-MM') AS label, SUM(revenue) AS revenue FROM v_revenue_daily
                    GROUP BY TO_CHAR(day,'YYYY-MM') ORDER BY 1""",
-    'yearly': """SELECT TO_CHAR(day,'YYYY') label, SUM(revenue) revenue FROM v_revenue_daily
+    'yearly': """SELECT TO_CHAR(day,'YYYY') AS label, SUM(revenue) AS revenue FROM v_revenue_daily
                   GROUP BY TO_CHAR(day,'YYYY') ORDER BY 1""",
-    'hotels': """SELECT h.hotel_name label,
-                   NVL((SELECT SUM(revenue) FROM v_revenue_daily v WHERE v.hotel_id=h.hotel_id),0) revenue,
-                   (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id) rooms,
-                   (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id AND r.status='OCCUPIED') occupied
+    'hotels': """SELECT h.hotel_name AS label,
+                   COALESCE((SELECT SUM(revenue) FROM v_revenue_daily v WHERE v.hotel_id=h.hotel_id),0) AS revenue,
+                   (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id) AS rooms,
+                   (SELECT COUNT(*) FROM room r WHERE r.hotel_id=h.hotel_id AND r.status='OCCUPIED') AS occupied
               FROM hotel h ORDER BY h.hotel_id""",
-    'seasonal': """SELECT TO_CHAR(check_in_date,'Mon') label, COUNT(*) bookings FROM reservation
+    'seasonal': """SELECT TO_CHAR(check_in_date,'Mon') AS label, COUNT(*) AS bookings FROM reservation
                     WHERE status <> 'CANCELLED' GROUP BY TO_CHAR(check_in_date,'Mon'), TO_CHAR(check_in_date,'MM')
                     ORDER BY TO_CHAR(check_in_date,'MM')""",
 }
